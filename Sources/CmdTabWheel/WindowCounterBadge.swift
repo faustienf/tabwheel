@@ -34,7 +34,7 @@ struct WindowNumberBadge: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        // The dark-theme accent is a light blue: white digits on it would be hard to read.
+        // The dark theme uses a brighter coral: dark digits keep the number readable.
         let ink: Color = colorScheme == .dark ? .black : .white
         if let number {
             Text("\(number)")

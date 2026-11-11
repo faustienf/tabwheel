@@ -56,8 +56,7 @@ private struct FanThumbnail: View {
 
     var body: some View {
         let isDark = colorScheme == .dark
-        // Same accent as the wheel's selection.
-        let accent = isDark ? Color(red: 0.57, green: 0.76, blue: 1) : Color(red: 0.16, green: 0.43, blue: 0.85)
+        let palette = WheelPalette(isDark: isDark)
         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         ZStack {
             if let preview {
@@ -75,8 +74,8 @@ private struct FanThumbnail: View {
             }
         }
         .frame(width: size.width, height: size.height)
-        .background(isDark ? Color(white: 0.12).opacity(0.86) : Color.white.opacity(0.88), in: shape)
-        .overlay(shape.strokeBorder(isChosen ? accent : (isDark ? Color.white : .black).opacity(0.12),
+        .background(palette.fanSurface, in: shape)
+        .overlay(shape.strokeBorder(isChosen ? palette.accent : palette.border,
                                     lineWidth: isChosen ? 2 : 0.75))
         .shadow(color: .black.opacity(isChosen ? 0.28 : 0.14), radius: isChosen ? 9 : 4, y: 2)
         .scaleEffect(isChosen ? 1.06 : 1)

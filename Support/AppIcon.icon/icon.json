@@ -1,51 +1,68 @@
 {
-  "fill" : {
-    "linear-gradient" : [
-      "display-p3:0.32157,0.47843,1.00000,1.00000",
-      "display-p3:0.12157,0.13333,0.52157,1.00000"
+  "fill": {
+    "linear-gradient": [
+      "display-p3:0.22000,0.20500,0.19000,1.00000",
+      "display-p3:0.10000,0.09500,0.09000,1.00000"
     ]
   },
-  "groups" : [
+  "groups": [
     {
-      "layers" : [
+      "layers": [
         {
-          "image-name" : "command.png",
-          "name" : "command"
-        },
-        {
-          "image-name" : "selected.png",
-          "name" : "selected"
+          "image-name": "command.png",
+          "name": "command",
+          "opacity": 1
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
       },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.2
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0
       }
     },
     {
-      "layers" : [
+      "layers": [
         {
-          "image-name" : "ring.png",
-          "name" : "ring",
-          "opacity" : 0.55
+          "image-name": "selected.png",
+          "name": "selected",
+          "opacity": 1
         }
       ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.4
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
       },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      },
+      "specular": false
+    },
+    {
+      "layers": [
+        {
+          "image-name": "ring.png",
+          "name": "ring",
+          "opacity": 0.8
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      },
+      "specular": false
     }
   ],
-  "supported-platforms" : {
-    "squares" : [
+  "supported-platforms": {
+    "squares": [
       "macOS"
     ]
   }

@@ -45,10 +45,13 @@ struct WheelView: View {
 
     private var surface: some View {
         Circle()
-            .strokeBorder(palette.ink.opacity(0.08), lineWidth: 0.5)
+            .fill(palette.surfaceTint)
+            .overlay(Circle().strokeBorder(palette.border, lineWidth: 0.75))
     }
 
-    /// Soft inward light plus a rim stroke that thickens as the pointer travels outward.
+    /// A quiet neutral selection field; coral stays on the rim.
+    /// The field fades in from the hub and is blurred well past its straight sides — with hard
+    /// edges a ring slice reads as a tilted box, and a glow between hub and icon as a stray shadow.
     private var sectors: some View {
         let count = model.items.count
         let strength = 0.45 + 0.55 * Double(model.selectionReach)
@@ -56,27 +59,14 @@ struct WheelView: View {
         return ZStack {
             ForEach(0..<count, id: \.self) { index in
                 let isSelected = index == model.selectedIndex
-                let angle = WheelGeometry.angle(of: index, count: count)
-                let glowStart = innerRadius - 22
-                let glowEnd = iconRadius - 4
-                let glowCenter = (glowStart + glowEnd) / 2
                 SectorShape(index: index, count: count,
                             innerRadius: innerRadius + 5, outerRadius: outerRadius - 4)
                     .fill(RadialGradient(
-                        colors: [accent.opacity(0.03), accent.opacity(0.48)],
+                        colors: [palette.selectionFill.opacity(0), palette.selectionFill],
                         center: .center, startRadius: innerRadius, endRadius: outerRadius
                     ))
-                    .blur(radius: 8)
+                    .blur(radius: 10)
                     .clipShape(Circle().inset(by: 6))
-                    .opacity(isSelected ? strength : 0)
-
-                Ellipse()
-                    .fill(LinearGradient(colors: [.clear, accent.opacity(0.6), accent.opacity(0.2)],
-                                         startPoint: .leading, endPoint: .trailing))
-                    .frame(width: glowEnd - glowStart, height: 34)
-                    .blur(radius: 8)
-                    .rotationEffect(.radians(angle))
-                    .offset(x: glowCenter * cos(angle), y: glowCenter * sin(angle))
                     .opacity(isSelected ? strength : 0)
 
                 SelectionRim(index: index, count: count, radius: outerRadius - 1)
@@ -115,12 +105,17 @@ struct WheelView: View {
                 VStack(spacing: 5) {
                     Text(item.name)
                         .font(.system(size: 16, weight: .semibold))
-                        .tracking(-0.3)
-                        .foregroundStyle(.primary.opacity(0.95))
+                        .tracking(-0.15)
+                        .foregroundStyle(palette.ink)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: innerRadius * 1.55)
-                    releaseHint
+                    VStack(spacing: 8) {
+                        Rectangle()
+                            .fill(palette.separator)
+                            .frame(width: model.layout.previewSize.width * 0.55, height: 0.5)
+                        releaseHint
+                    }
                 }
             }
         } else {
@@ -129,10 +124,10 @@ struct WheelView: View {
                 VStack(spacing: 5) {
                     Text("Choose an app")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.primary.opacity(0.9))
+                        .foregroundStyle(palette.ink.opacity(0.9))
                     Text("Move the pointer or press Tab")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(palette.secondaryInk)
                 }
             }
         }
@@ -144,8 +139,8 @@ struct WheelView: View {
             CommandKeycap(size: CGSize(width: 24, height: 20), symbolSize: 11.5)
             Text("to switch")
         }
-        .font(.system(size: 12, weight: .medium))
-        .foregroundStyle(palette.ink.opacity(0.88))
+        .font(.system(size: 12, weight: .regular))
+        .foregroundStyle(palette.secondaryInk)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Release Command to switch")
     }
@@ -162,7 +157,7 @@ struct WheelView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(palette.ink.opacity(0.16), lineWidth: 0.75)
+                            .strokeBorder(palette.border, lineWidth: 0.75)
                     }
                     .shadow(color: .black.opacity(palette.previewShadow), radius: 6, y: 3)
                     .padding(2)
@@ -218,17 +213,6 @@ private struct HubIdentity: Hashable {
     let isQuickSwitch: Bool
 }
 
-/// Theme-specific glass colors; content and window captures keep their original colors.
-private struct WheelPalette {
-    let isDark: Bool
-
-    var ink: Color { isDark ? .white : .black }
-    var accent: Color {
-        isDark ? Color(red: 0.57, green: 0.76, blue: 1) : Color(red: 0.16, green: 0.43, blue: 0.85)
-    }
-    var previewShadow: Double { isDark ? 0.16 : 0.10 }
-}
-
 /// A quiet key outline keeps the shortcut in the same visual weight as its caption.
 private struct CommandKeycap: View {
     let size: CGSize
@@ -238,13 +222,14 @@ private struct CommandKeycap: View {
     var body: some View {
         let isDark = colorScheme == .dark
         let shape = RoundedRectangle(cornerRadius: size.height * 0.24, style: .continuous)
-        let ink: Color = isDark ? .white : .black
+        let palette = WheelPalette(isDark: isDark)
+        let ink = palette.ink
         return Image(systemName: "command")
             .font(.system(size: symbolSize, weight: .medium))
-            .foregroundStyle(ink.opacity(0.88))
+            .foregroundStyle(palette.secondaryInk)
             .frame(width: size.width, height: size.height)
             .background(shape.fill(ink.opacity(isDark ? 0.06 : 0.035)))
-            .overlay(shape.strokeBorder(ink.opacity(isDark ? 0.2 : 0.16), lineWidth: 0.65))
+            .overlay(shape.strokeBorder(palette.border, lineWidth: 0.65))
     }
 }
 
