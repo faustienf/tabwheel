@@ -101,3 +101,7 @@ scripts/run.sh
 ## Status
 
 Early, so expect rough edges. There are no releases yet, and builds aren't notarized.
+
+## License
+
+[MIT](LICENSE)
