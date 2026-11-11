@@ -1,6 +1,11 @@
 .DS_Store
 .build/
-.swiftpm/
+build/
 *.xcodeproj/
 DerivedData/
-Package.resolved
+
+# Xcode's local state for the package, except the shared scheme (⌘R setup)
+.swiftpm/*
+!.swiftpm/xcode/
+.swiftpm/xcode/*
+!.swiftpm/xcode/xcshareddata/

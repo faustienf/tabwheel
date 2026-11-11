@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ⌘R in Xcode for a SwiftPM package that needs to run as a real .app:
+  - Build post-action: wrap the built binary into build/CmdTabWheel.app (scripts/bundle-app.sh).
+  - Run pre-action:    quit a copy started outside Xcode, so two event taps don't fight.
+  - Run:               launch build/CmdTabWheel.app under the debugger.
+  - Run post-action:   Stop kills the app before it can re-enable the system ⌘Tab — do it for it.
+  Xcode gives package scripts no SRCROOT, so the package root is derived from WORKSPACE_PATH.
+-->
+<Scheme
+   LastUpgradeVersion = "2700"
+   version = "1.7">
+   <BuildAction
+      parallelizeBuildables = "YES"
+      buildImplicitDependencies = "YES">
+      <PostActions>
+         <ExecutionAction
+            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
+            <ActionContent
+               title = "Bundle .app"
+               scriptText = "ROOT=&quot;${WORKSPACE_PATH%/.swiftpm/xcode/package.xcworkspace}&quot;&#10;&quot;$ROOT/scripts/bundle-app.sh&quot; &quot;$BUILT_PRODUCTS_DIR/$PRODUCT_NAME&quot; &quot;$ROOT/build/CmdTabWheel.app&quot;&#10;">
+               <EnvironmentBuildable>
+                  <BuildableReference
+                     BuildableIdentifier = "primary"
+                     BlueprintIdentifier = "CmdTabWheel"
+                     BuildableName = "CmdTabWheel"
+                     BlueprintName = "CmdTabWheel"
+                     ReferencedContainer = "container:">
+                  </BuildableReference>
+               </EnvironmentBuildable>
+            </ActionContent>
+         </ExecutionAction>
+      </PostActions>
+      <BuildActionEntries>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "CmdTabWheel"
+               BuildableName = "CmdTabWheel"
+               BlueprintName = "CmdTabWheel"
+               ReferencedContainer = "container:">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "YES">
+   </TestAction>
+   <LaunchAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      launchStyle = "0"
+      useCustomWorkingDirectory = "NO"
+      ignoresPersistentStateOnLaunch = "NO"
+      debugDocumentVersioning = "YES"
+      debugServiceExtension = "internal"
+      allowLocationSimulation = "YES">
+      <PreActions>
+         <ExecutionAction
+            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
+            <ActionContent
+               title = "Quit running copy"
+               scriptText = "if pkill -x CmdTabWheel; then&#10;  for _ in $(seq 50); do pgrep -x CmdTabWheel &gt;/dev/null || break; sleep 0.1; done&#10;fi&#10;true&#10;">
+            </ActionContent>
+         </ExecutionAction>
+      </PreActions>
+      <PostActions>
+         <ExecutionAction
+            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
+            <ActionContent
+               title = "Restore system Cmd-Tab"
+               scriptText = "ROOT=&quot;${WORKSPACE_PATH%/.swiftpm/xcode/package.xcworkspace}&quot;&#10;&quot;$ROOT/build/CmdTabWheel.app/Contents/MacOS/CmdTabWheel&quot; --restore-native-switcher&#10;">
+               <EnvironmentBuildable>
+                  <BuildableReference
+                     BuildableIdentifier = "primary"
+                     BlueprintIdentifier = "CmdTabWheel"
+                     BuildableName = "CmdTabWheel"
+                     BlueprintName = "CmdTabWheel"
+                     ReferencedContainer = "container:">
+                  </BuildableReference>
+               </EnvironmentBuildable>
+            </ActionContent>
+         </ExecutionAction>
+      </PostActions>
+      <PathRunnable
+         runnableDebuggingMode = "0"
+         FilePath = "/Users/faustienf/projects/cmd-tab-wheel/build/CmdTabWheel.app">
+      </PathRunnable>
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "CmdTabWheel"
+            BuildableName = "CmdTabWheel"
+            BlueprintName = "CmdTabWheel"
+            ReferencedContainer = "container:">
+         </BuildableReference>
+      </MacroExpansion>
+   </LaunchAction>
+   <ProfileAction
+      buildConfiguration = "Release"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      savedToolIdentifier = ""
+      useCustomWorkingDirectory = "NO"
+      debugDocumentVersioning = "YES">
+      <PathRunnable
+         runnableDebuggingMode = "0"
+         FilePath = "/Users/faustienf/projects/cmd-tab-wheel/build/CmdTabWheel.app">
+      </PathRunnable>
+   </ProfileAction>
+   <AnalyzeAction
+      buildConfiguration = "Debug">
+   </AnalyzeAction>
+   <ArchiveAction
+      buildConfiguration = "Release"
+      revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>
