@@ -10,10 +10,7 @@
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/wheel-dark.jpg">
-    <img src="docs/wheel-light.jpg" width="760" alt="The wheel open over the desktop: nine apps around a ring, Terminal selected, a preview of its window in the middle">
-  </picture>
+  <img src="docs/wheel-dark.jpg" width="760" alt="The wheel open over the desktop: nine apps around a ring, Terminal selected, a preview of its window in the middle">
 </p>
 
 The system switcher is a row. To reach the fifth app you press Tab five times, and the order reshuffles every time you switch. ⌘Tab Wheel puts every running app on a ring instead: each one is a direction, not a number of presses. Apps keep their slots, so after a while your hand knows where Mail is without looking.
