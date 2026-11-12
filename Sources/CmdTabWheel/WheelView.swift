@@ -225,8 +225,13 @@ struct WheelView: View {
                     .resizable()
                     .interpolation(.high)
                     .frame(width: size, height: size)
-                    .overlay(alignment: .topTrailing) { WindowNumberBadge(number: item.windowNumber, tint: accent) }
                     .shadow(color: .black.opacity(isSelected ? palette.previewShadow : palette.previewShadow / 2), radius: isSelected ? 4 : 2, y: 2)
+                    .overlay(alignment: .bottom) {
+                        WindowPositionIndicator(number: item.windowNumber, count: model.windows[item.pid]?.count ?? 0,
+                                                maxWidth: size, tint: accent, isSelected: isSelected)
+                            .padding(.top, 4)
+                            .alignmentGuide(.bottom) { $0[.top] }
+                    }
                     .scaleEffect(isSelected && !reduceMotion ? 1.045 : 1)
                     .offset(x: iconRadius * cos(angle), y: iconRadius * sin(angle))
                     .accessibilityLabel(item.name)

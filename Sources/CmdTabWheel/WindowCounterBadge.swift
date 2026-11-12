@@ -27,25 +27,35 @@ struct WindowCounterBadge: View {
     }
 }
 
-/// An app with several windows: which of them this icon stands for.
-struct WindowNumberBadge: View {
+/// A small position indicator beneath an app icon, only when it has several windows.
+struct WindowPositionIndicator: View {
     var number: Int?
+    var count: Int
+    var maxWidth: CGFloat
     var tint: Color
+    var isSelected: Bool
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        // The dark theme uses a brighter coral: dark digits keep the number readable.
-        let ink: Color = colorScheme == .dark ? .black : .white
-        if let number {
-            Text("\(number)")
-                .font(.system(size: 10, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(ink)
-                .frame(minWidth: 16, minHeight: 16)
-                .background(tint, in: Circle())
-                .overlay(Circle().strokeBorder(ink.opacity(0.6), lineWidth: 1))
-                .offset(x: -4, y: 4)
-                .accessibilityLabel("Window \(number)")
+        if let number, count > 1 {
+            let palette = WheelPalette(isDark: colorScheme == .dark)
+            let current = min(max(number - 1, 0), count - 1)
+            let positionLimit = max(1, min(7, Int((maxWidth - 1) / 6)))
+            let isAggregate = count > positionLimit
+            HStack(spacing: 3) {
+                ForEach(0..<(isAggregate ? 3 : count), id: \.self) { index in
+                    let isCurrent = !isAggregate && index == current
+                    Capsule()
+                        .fill(isAggregate ? (isSelected ? tint.opacity(0.8) : palette.ink.opacity(0.45)) :
+                            (isCurrent ? (isSelected ? tint : palette.ink.opacity(0.72)) : palette.ink.opacity(0.28)))
+                        .frame(width: isCurrent ? 7 : 2.5, height: 2.5)
+                }
+            }
+            .scaleEffect(isAggregate ? min(1, maxWidth / 13.5) : 1)
+            .frame(height: 3)
+            .animation(.easeOut(duration: 0.1), value: isSelected)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Window \(number) of \(count)")
         }
     }
 }
