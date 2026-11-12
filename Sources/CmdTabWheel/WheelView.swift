@@ -37,6 +37,9 @@ struct WheelView: View {
                 .animation(.easeOut(duration: 0.07), value: model.selectionReach)
             hub
             icons.animation(selectionAnimation, value: model.selectedIndex)
+            actionRail
+                .animation(.easeOut(duration: reduceMotion ? 0.08 : 0.12), value: model.selectedIndex)
+                .animation(.easeOut(duration: 0.07), value: model.selectionReach)
         }
         .frame(width: model.layout.diameter, height: model.layout.diameter)
     }
@@ -49,30 +52,63 @@ struct WheelView: View {
             .overlay(Circle().strokeBorder(palette.border, lineWidth: 0.75))
     }
 
-    /// A quiet neutral selection field; coral stays on the rim.
-    /// The field fades in from the hub and is blurred well past its straight sides — with hard
-    /// edges a ring slice reads as a tilted box, and a glow between hub and icon as a stray shadow.
+    /// A soft selection field that gains contrast and coral color as the pointer travels outward.
     private var sectors: some View {
         let count = model.items.count
-        let strength = 0.45 + 0.55 * Double(model.selectionReach)
-        let rimWidth = 1.25 + 3.25 * model.selectionReach
+        let fill = palette.selectionFill(reach: model.selectionReach)
+        let wash = palette.selectionAccent(reach: model.selectionReach)
+        let rimWidth = 1.25 + 5.75 * model.selectionReach
         return ZStack {
             ForEach(0..<count, id: \.self) { index in
                 let isSelected = index == model.selectedIndex
                 SectorShape(index: index, count: count,
                             innerRadius: innerRadius + 5, outerRadius: outerRadius - 4)
                     .fill(RadialGradient(
-                        colors: [palette.selectionFill.opacity(0), palette.selectionFill],
+                        colors: [fill.opacity(0.3), fill],
                         center: .center, startRadius: innerRadius, endRadius: outerRadius
                     ))
+                    .overlay {
+                        SectorShape(index: index, count: count,
+                                    innerRadius: innerRadius + 5, outerRadius: outerRadius - 4)
+                            .fill(RadialGradient(colors: [.clear, wash],
+                                                 center: .center, startRadius: iconRadius - 12,
+                                                 endRadius: outerRadius))
+                    }
                     .blur(radius: 10)
                     .clipShape(Circle().inset(by: 6))
-                    .opacity(isSelected ? strength : 0)
+                    .opacity(isSelected ? 1 : 0)
 
                 SelectionRim(index: index, count: count, radius: outerRadius - 1)
                     .stroke(accent.opacity(0.98), style: StrokeStyle(lineWidth: rimWidth, lineCap: .round))
-                    .opacity(isSelected ? 1 : 0)
+                    .opacity(isSelected && model.chosenWindow(of: model.items[index]) == nil ? 1 : 0)
             }
+        }
+    }
+
+    /// A slim rail replaces the selected rim. The close action sits off the radial path.
+    @ViewBuilder
+    private var actionRail: some View {
+        if let index = model.selectedIndex, model.chosenWindow(of: model.items[index]) != nil {
+            let count = model.items.count
+            let center = model.layout.closeButtonCenter(index: index, count: count)
+            let railAngle = model.layout.actionRailAngle(index: index, count: count)
+            let direction = model.layout.actionRailDirection(index: index, count: count)
+            ZStack {
+                ActionRailArc(angle: railAngle, radius: model.layout.actionRailRadius,
+                              start: -WheelLayout.actionRailHalfAngle, end: WheelLayout.actionRailHalfAngle)
+                    .stroke(palette.border, style: StrokeStyle(lineWidth: 13.5, lineCap: .round))
+                ActionRailArc(angle: railAngle, radius: model.layout.actionRailRadius,
+                              start: -WheelLayout.actionRailHalfAngle, end: WheelLayout.actionRailHalfAngle)
+                    .stroke(palette.actionRailSurface, style: StrokeStyle(lineWidth: 12.25, lineCap: .round))
+                ActionRailArc(angle: railAngle, radius: model.layout.actionRailRadius,
+                              start: direction > 0 ? -0.065 : 0.005,
+                              end: direction > 0 ? -0.005 : 0.065)
+                    .stroke(accent, style: StrokeStyle(lineWidth: 1.3 + 4.2 * model.selectionReach, lineCap: .round))
+                CloseButton(size: WheelLayout.closeButtonSize, isHovered: model.isCloseButtonHovered)
+                    .offset(x: center.x, y: center.y)
+            }
+            .id(index)
+            .transition(.opacity)
         }
     }
 
@@ -180,7 +216,7 @@ struct WheelView: View {
 
     private var icons: some View {
         let count = model.items.count
-        let size = iconSize(count: count)
+        let size = model.layout.iconSize(count: count)
         return ZStack {
             ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                 let isSelected = index == model.selectedIndex
@@ -198,11 +234,26 @@ struct WheelView: View {
             }
         }
     }
+}
 
-    private func iconSize(count: Int) -> CGFloat {
-        guard count > 0 else { return 0 }
-        let slotLength = 2 * .pi * iconRadius / CGFloat(count)
-        return min(60, slotLength * 0.64)
+/// An action embedded in the selected sector’s rail, outside the app icon.
+/// Clicks never reach SwiftUI here (WheelWindow takes them all) — WheelModel hit-tests it.
+private struct CloseButton: View {
+    let size: CGFloat
+    let isHovered: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let palette = WheelPalette(isDark: colorScheme == .dark)
+        let shape = Circle().inset(by: 2)
+        Image(systemName: "xmark")
+            .font(.system(size: 8.5, weight: .medium))
+            .foregroundStyle(isHovered ? palette.accent : palette.ink.opacity(0.8))
+            .frame(width: size, height: size)
+            .background(shape.fill(isHovered ? palette.accent.opacity(0.18) : .clear))
+            .animation(.easeOut(duration: 0.1), value: isHovered)
+            .accessibilityLabel("Close window")
+            .accessibilityHint("Closes the window shown in the preview")
     }
 }
 
@@ -252,6 +303,20 @@ private struct SectorShape: Shape {
         path.addArc(center: center, radius: outerRadius, startAngle: start, endAngle: end, clockwise: false)
         path.addArc(center: center, radius: innerRadius, startAngle: end, endAngle: start, clockwise: true)
         path.closeSubpath()
+        return path
+    }
+}
+
+private struct ActionRailArc: Shape {
+    let angle: Double
+    let radius: CGFloat
+    let start: Double
+    let end: Double
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: radius,
+                    startAngle: .radians(angle + start), endAngle: .radians(angle + end), clockwise: false)
         return path
     }
 }

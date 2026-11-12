@@ -13,12 +13,7 @@ import QuartzCore
 ///
 /// Created once at launch; shown/hidden with orderFront/orderOut — that's instant.
 final class WheelWindow: NSPanel {
-    var onMouseMoved: () -> Void = {}
-    var onClick: () -> Void = {}
     private var wheelView: NSView?
-    /// The button went down on this panel — so its release is a click here,
-    /// not the end of a drag that started before the wheel opened.
-    private var mouseDownInside = false
 
     /// `size`: the square the wheel view draws on — the wheel plus room around it.
     convenience init(size: CGFloat, content: some View) {
@@ -35,7 +30,6 @@ final class WheelWindow: NSPanel {
         appearance = nil                  // inherit the app theme, or macOS when set to System
         isReleasedWhenClosed = false
         ignoresMouseEvents = false        // explicit: take the mouse even over transparent pixels
-        acceptsMouseMovedEvents = true
         becomesKeyOnlyIfNeeded = false
         hidesOnDeactivate = false         // panels hide when their app deactivates; ours never activates
         level = .popUpMenu                // above regular windows, the Dock and the menu bar
@@ -82,26 +76,18 @@ final class WheelWindow: NSPanel {
     }
 
     func hide() {
-        mouseDownInside = false
         orderOut(nil)
         alphaValue = 1
     }
 
-    /// All mouse input lands here while the wheel is open: report moves and left clicks,
-    /// swallow the rest — nothing below should react while the wheel is open.
+    /// The wheel reads the mouse from MouseTap, which works even where this panel gets no
+    /// events (Mission Control, other screens). Whatever does land here is swallowed:
+    /// nothing below should react while the wheel is open.
     override func sendEvent(_ event: NSEvent) {
         switch event.type {
-        case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
-            onMouseMoved()
-        case .leftMouseDown:
-            mouseDownInside = true
-        case .leftMouseUp:
-            // Fire on release, like a normal button.
-            if mouseDownInside {
-                mouseDownInside = false
-                onClick()
-            }
-        case .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .scrollWheel:
+        case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+             .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+             .otherMouseDown, .otherMouseUp, .scrollWheel:
             break
         default:
             super.sendEvent(event)
@@ -131,19 +117,6 @@ private final class BackdropView: NSView {
     required init?(coder: NSCoder) {
         fatalError("not used")
     }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        // .activeAlways: mouse moves arrive even though our app is never the active one.
-        addTrackingArea(NSTrackingArea(
-            rect: .zero,
-            options: [.mouseMoved, .activeAlways, .inVisibleRect],
-            owner: self
-        ))
-    }
-
-    override func mouseMoved(with event: NSEvent) {} // the panel's sendEvent already reported it
 }
 
 extension NSScreen {

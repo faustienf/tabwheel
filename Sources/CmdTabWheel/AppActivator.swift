@@ -13,11 +13,19 @@ import ApplicationServices
 @MainActor
 enum AppActivator {
     /// `windowID`: the window to bring up; nil = the app's front window.
-    static func activate(pid: pid_t, windowID requestedWindowID: CGWindowID? = nil) {
+    /// `opensWindowIfNone`: for an app with no window here, do what a Dock click does (which
+    /// opens a new window if it has none at all). Off when only handing focus back: an app the
+    /// user just closed the windows of must not get a fresh one.
+    static func activate(pid: pid_t, windowID requestedWindowID: CGWindowID? = nil, opensWindowIfNone: Bool = true) {
         guard let app = NSRunningApplication(processIdentifier: pid) else { return }
         let name = app.localizedName ?? "pid \(pid)"
 
         guard let windowID = requestedWindowID ?? WindowList.topmostWindowID(of: pid) else {
+            guard opensWindowIfNone else {
+                log.notice("activating \(name, privacy: .public), no window to bring up")
+                app.activate()
+                return
+            }
             log.notice("activating \(name, privacy: .public) via LaunchServices")
             openViaLaunchServices(app)
             return
@@ -68,15 +76,11 @@ private enum WindowFocus {
         @convention(c) (UnsafePointer<ProcessSerialNumber>, CGWindowID, UInt32) -> CGError.RawValue
     private typealias PostEventRecordTo =
         @convention(c) (UnsafePointer<ProcessSerialNumber>, UnsafePointer<UInt8>) -> CGError.RawValue
-    private typealias AXUIElementGetWindow =
-        @convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError
 
     // GetProcessForPID is public but deprecated — looked up dynamically to avoid the warning.
     private static let getProcessForPID: GetProcessForPID? = symbol("GetProcessForPID")
     private static let setFrontProcessWithOptions: SetFrontProcessWithOptions? = symbol("_SLPSSetFrontProcessWithOptions")
     private static let postEventRecordTo: PostEventRecordTo? = symbol("SLPSPostEventRecordTo")
-    /// Maps an Accessibility window element to its WindowServer window ID.
-    private static let axUIElementGetWindow: AXUIElementGetWindow? = symbol("_AXUIElementGetWindow")
 
     /// kCPSUserGenerated: treat it as if the user clicked the window.
     private static let userGenerated: UInt32 = 0x200
@@ -111,28 +115,11 @@ private enum WindowFocus {
     }
 
     private static func raise(pid: pid_t, windowID: CGWindowID) {
-        guard let axUIElementGetWindow else { return }
-        let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, 0.5) // a hung app must not hang us for the default 6 s
-
-        var value: CFTypeRef?
-        guard
-            AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
-            let windows = value as? [AXUIElement]
-        else {
-            log.error("AX: can't list windows of pid \(pid, privacy: .public)")
-            return
+        guard let window = AXWindow.find(pid: pid, windowID: windowID) else { return }
+        let result = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        if result != .success {
+            log.error("AX: raise failed with \(result.rawValue, privacy: .public)")
         }
-        for window in windows {
-            var id: CGWindowID = 0
-            guard axUIElementGetWindow(window, &id) == .success, id == windowID else { continue }
-            let result = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-            if result != .success {
-                log.error("AX: raise failed with \(result.rawValue, privacy: .public)")
-            }
-            return
-        }
-        log.error("AX: window \(windowID, privacy: .public) not found in pid \(pid, privacy: .public)")
     }
 
     private static func symbol<T>(_ name: String) -> T? {

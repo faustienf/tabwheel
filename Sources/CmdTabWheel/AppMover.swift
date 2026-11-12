@@ -52,7 +52,8 @@ enum AppMover {
             try? LoginItem.setEnabled(false)
             UserDefaults.standard.set(true, forKey: reRegisterLoginItemKey)
         }
-        log.notice("moved to \(destination.path, privacy: .public), relaunching")
+        // The folder's name only: a full ~/Applications path would carry the user's name.
+        log.notice("moved to \(folder.lastPathComponent, privacy: .public), relaunching")
         relaunch(destination, ejecting: diskImage)
         return true
         #endif

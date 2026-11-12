@@ -6,7 +6,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let wheel = WheelController()
     private let interceptor = CommandTabInterceptor()
     private let appearanceSettings = AppearanceSettings()
-    private let windowModeSettings = WindowModeSettings()
     private let setup = SetupWindowController()
     private var statusItem: NSStatusItem?
     private var permissionTimer: Timer?
@@ -96,13 +95,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appearanceItem = NSMenuItem(title: "Appearance", action: nil, keyEquivalent: "")
         appearanceItem.submenu = appearanceSettings.makeMenu()
         menu.addItem(appearanceItem)
-        let windowsItem = NSMenuItem(title: "Windows", action: nil, keyEquivalent: "")
-        windowsItem.submenu = windowModeSettings.makeMenu()
-        menu.addItem(windowsItem)
         menu.addItem(.separator())
         let setupItem = NSMenuItem(title: "Setup…", action: #selector(showSetup), keyEquivalent: "")
         setupItem.target = self
         menu.addItem(setupItem)
+        let logItem = NSMenuItem(title: "Save Log…", action: #selector(saveLog), keyEquivalent: "")
+        logItem.target = self
+        menu.addItem(logItem)
         menu.addItem(
             withTitle: "Quit ⌘Tab Wheel",
             action: #selector(NSApplication.terminate(_:)),
@@ -110,6 +109,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         item.menu = menu
         statusItem = item
+    }
+
+    @objc private func saveLog() {
+        LogExport.save()
     }
 
     @objc private func showSetup() {

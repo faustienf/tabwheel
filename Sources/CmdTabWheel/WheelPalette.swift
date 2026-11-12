@@ -24,11 +24,17 @@ struct WheelPalette {
 
     var border: Color { ink.opacity(isDark ? 0.11 : 0.09) }
 
-    var selectionFill: Color { ink.opacity(isDark ? 0.1 : 0.065) }
+    func selectionFill(reach: CGFloat) -> Color {
+        ink.opacity(isDark ? 0.13 + 0.29 * Double(reach) : 0.07 + 0.17 * Double(reach))
+    }
+
+    func selectionAccent(reach: CGFloat) -> Color {
+        accent.opacity(isDark ? 0.065 + 0.22 * Double(reach) : 0.04 + 0.15 * Double(reach))
+    }
 
     var separator: Color { ink.opacity(0.09) }
 
-    var fanSurface: Color {
+    var actionRailSurface: Color {
         isDark ? Color(red: 0.14, green: 0.14, blue: 0.155).opacity(0.96) : .white.opacity(0.96)
     }
 

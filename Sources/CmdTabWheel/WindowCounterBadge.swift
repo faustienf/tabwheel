@@ -27,7 +27,7 @@ struct WindowCounterBadge: View {
     }
 }
 
-/// Sector per window: which of the app's windows this icon stands for.
+/// An app with several windows: which of them this icon stands for.
 struct WindowNumberBadge: View {
     var number: Int?
     var tint: Color
@@ -44,7 +44,7 @@ struct WindowNumberBadge: View {
                 .frame(minWidth: 16, minHeight: 16)
                 .background(tint, in: Circle())
                 .overlay(Circle().strokeBorder(ink.opacity(0.6), lineWidth: 1))
-                .offset(x: 5, y: -5)
+                .offset(x: -4, y: 4)
                 .accessibilityLabel("Window \(number)")
         }
     }

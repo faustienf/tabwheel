@@ -13,19 +13,30 @@ final class WheelController {
     private let history = AppHistory()
     /// The app in front when the wheel opened — gets its focus back if nothing is chosen.
     private var frontAppAtOpen: pid_t?
-    /// Mouse moves on screens the panel doesn't cover go to other apps; a global monitor sees them.
-    private var otherScreensMonitor: Any?
-    /// What we last set, so the cursor is only touched when it actually changes.
-    private var showsPointingHand = false
+    /// The mouse while the wheel is open, on every screen and over Mission Control too.
+    private let mouseTap = MouseTap()
     private var isOpen = false
+    private var terminationObserver: NSObjectProtocol?
+    /// An app we told to close a window or quit is asking something first ("Save changes?").
+    /// The wheel covers that question, so when the wheel closes this app comes to the front.
+    private var askingApp: (pid: pid_t, window: CGWindowID?)?
 
     init() {
         let model = WheelModel(layout: .standard)
         self.model = model
         // Built up front so the first ⌘Tab shows it instantly.
-        self.window = WheelWindow(size: model.layout.canvasSize, content: WheelCanvas(model: model))
-        window.onMouseMoved = { [weak self] in self?.pointerMoved() }
-        window.onClick = { [weak self] in self?.clicked() }
+        self.window = WheelWindow(size: model.layout.canvasSize, content: WheelView(model: model))
+        mouseTap.onMove = { [weak self] mouse in self?.pointerMoved(to: mouse) }
+        mouseTap.onClick = { [weak self] mouse in self?.clicked(at: mouse) }
+        // An app that quits while the wheel is open (⌘Q here, or on its own) leaves the wheel.
+        terminationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            else { return }
+            let pid = app.processIdentifier
+            MainActor.assumeIsolated { self?.appTerminated(pid) }
+        }
     }
 
     func handle(_ input: WheelInput) {
@@ -38,6 +49,14 @@ final class WheelController {
             model.step(backward: backward)
             updateCursor()
         case .commit:
+            // Closed windows or quit apps and picked nothing after → done tidying up: back to
+            // where the user was, not to the app the selection was merely left on.
+            if model.hasClosedSomething {
+                close()
+                log.notice("closed after closing windows/apps: back to where we were")
+                returnFocusOrShowQuestion()
+                return
+            }
             // Nothing selected and nothing touched → quick ⌘Tab → back to the previous app.
             let selected = model.selectedItem
             let target = selected ?? model.quickSwitchItem
@@ -50,34 +69,134 @@ final class WheelController {
             if let target {
                 activateSoon(target.pid, window: model.chosenWindow(of: target)?.id)
             } else {
-                // Hand the focus back to where the user was (our panel took it).
-                activateSoon(frontAppAtOpen)
+                returnFocusOrShowQuestion()
             }
         case .cancel:
             close()
-            activateSoon(frontAppAtOpen)
+            returnFocusOrShowQuestion()
+        case .closeWindow:
+            if let item = model.selectedItem, let window = model.chosenWindow(of: item) {
+                closeWindow(window, of: item)
+            }
+        case .quitApp:
+            if let item = model.selectedItem {
+                quit(item)
+            }
         }
     }
 
+    /// Close button or ⌘W. The wheel stays open for the next one.
+    /// The app's last window is the same as ⌘Q: closing the only window means "done with it".
+    private func closeWindow(_ window: AppWindow, of item: WheelItem) {
+        log.notice("closing a window of \(item.name, privacy: .public)")
+        model.removeWindow(window.id, of: item.pid)
+        updateCursor()
+        let pid = item.pid
+        let name = item.name
+        // Finder can't quit — it just stays without windows.
+        let mayQuit = item.app.bundleIdentifier != "com.apple.finder"
+        let windowID = window.id
+        // Accessibility and the window checks talk to other processes: off the main thread.
+        Task.detached(priority: .userInitiated) { [weak self] in
+            // Quit straight away, without closing the window first: that doesn't depend on the
+            // app reacting to its close button (a busy one times out, Stickies ignores it).
+            if mayQuit, !WindowList.hasOtherWindows(of: pid, besides: windowID) {
+                log.notice("that was the last window of \(name, privacy: .public): quitting it")
+                await self?.terminate(pid)
+                return
+            }
+            let windowsBefore = WindowList.onScreenWindowIDs(of: pid)
+            // A question ("Save changes?") is a new window: a sheet or an alert.
+            let isAsking = { !WindowList.onScreenWindowIDs(of: pid).subtracting(windowsBefore).isEmpty }
+            guard AXWindow.close(pid: pid, windowID: windowID) else { return }
+            // Windows go within a frame or two.
+            var closed = await AXWindow.waitUntilClosed(pid: pid, windowID: windowID, timeout: .milliseconds(500))
+            if !closed, !isAsking() {
+                // Still there and no question: the app ignored the pressed button (Stickies
+                // does). Its own Close menu command, then.
+                log.notice("\(name, privacy: .public) ignored its close button, trying its Close command")
+                if AXWindow.closeViaMenu(pid: pid, windowID: windowID) {
+                    closed = await AXWindow.waitUntilClosed(pid: pid, windowID: windowID, timeout: .milliseconds(500))
+                }
+            }
+            guard !closed else { return }
+            guard isAsking() else {
+                log.error("couldn't close a window of \(name, privacy: .public)")
+                return
+            }
+            // The user has to see the question: the wheel covers it.
+            log.notice("\(name, privacy: .public) is asking something before closing the window")
+            await self?.appIsAsking(pid: pid, window: windowID)
+        }
+    }
+
+    /// See `askingApp`. If the wheel is already gone, show the question right away.
+    private func appIsAsking(pid: pid_t, window: CGWindowID?) {
+        if isOpen {
+            askingApp = (pid, window)
+        } else {
+            activateSoon(pid, window: window, opensWindowIfNone: false)
+        }
+    }
+
+    /// Wheel closed without a new pick: an app with a pending question comes first, else back
+    /// to where the user was.
+    private func returnFocusOrShowQuestion() {
+        if let asking = askingApp, kill(asking.pid, 0) == 0 {
+            log.notice("showing the question of pid \(asking.pid, privacy: .public)")
+            activateSoon(asking.pid, window: asking.window, opensWindowIfNone: false)
+        } else {
+            returnFocus()
+        }
+        askingApp = nil
+    }
+
+    /// ⌘Q, like in the system switcher. The app may ask about unsaved documents first, so its
+    /// sector goes only once it has actually quit (the termination observer in `init`).
+    private func quit(_ item: WheelItem) {
+        // Finder ignores quit requests (unless a hidden setting allows it); don't pretend.
+        guard item.app.bundleIdentifier != "com.apple.finder" else { return }
+        log.notice("quitting \(item.name, privacy: .public)")
+        model.noteQuitRequested()
+        let pid = item.pid
+        Task { await terminate(pid) } // after the event tap callback returns
+    }
+
+    /// Asks the app to quit. Still running a second later: it's asking about unsaved documents.
+    private func terminate(_ pid: pid_t) async {
+        guard let app = NSRunningApplication(processIdentifier: pid) else { return }
+        app.terminate()
+        try? await Task.sleep(for: .seconds(1))
+        if !app.isTerminated { appIsAsking(pid: pid, window: nil) }
+    }
+
+    private func appTerminated(_ pid: pid_t) {
+        guard isOpen else { return }
+        model.removeApp(pid)
+        updateCursor()
+    }
+
     private func open() {
+        // ⌘Tab does nothing there, as with the system switcher. The rest of this ⌘ press
+        // (Tab, releasing ⌘) is ignored too: everything but `open` needs an open wheel.
+        if MissionControl.isOpen() {
+            log.notice("⌘Tab in Mission Control: no wheel")
+            return
+        }
         guard let screen = NSScreen.withMouse else { return }
         isOpen = true
+        askingApp = nil
         frontAppAtOpen = NSWorkspace.shared.frontmostApplication?.processIdentifier
         window.cover(screen)                  // pointer math below needs the final position
-        model.reload(pointer: cursorFromWheelCenter(), quickSwitchTo: history.previous, windowMode: .saved)
+        model.reload(pointer: cursorFromWheelCenter(), quickSwitchTo: history.previous)
         window.show()
-        setCursor(pointingHand: false)        // replace whatever the app below had (e.g. I-beam)
-
-        otherScreensMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.pointerMoved() }
-        }
+        NSCursor.arrow.set()                  // replace whatever the app below had (e.g. I-beam)
+        mouseTap.enable()
 
         // Screenshot every app right away, before the user points anywhere. Previews from the
         // last opening are already on screen meanwhile; fresh ones replace them as they come.
         let model = self.model
-        // With a sector per window an app appears several times — one entry per app is enough.
+        // An app with several windows has several sectors — one entry per app is enough.
         let windows = Dictionary(
             model.items.map { item in (item.pid, (model.windows[item.pid] ?? []).map(\.id)) },
             uniquingKeysWith: { first, _ in first }
@@ -89,24 +208,28 @@ final class WheelController {
 
     private func close() {
         isOpen = false
-        if let otherScreensMonitor {
-            NSEvent.removeMonitor(otherScreensMonitor)
-        }
-        otherScreensMonitor = nil
+        mouseTap.disable()
         window.hide()
         model.reset()
         // Don't leave the hand behind: the app below only sets its cursor on its next mouse event.
-        setCursor(pointingHand: false)
+        NSCursor.arrow.set()
     }
 
-    private func pointerMoved() {
-        model.movePointer(to: cursorFromWheelCenter())
+    private func pointerMoved(to mouse: NSPoint) {
+        model.movePointer(to: cursorFromWheelCenter(mouse))
         updateCursor()
     }
 
-    /// Left click: switch to the app whose sector the cursor points at. Clicks in the hub do nothing.
-    private func clicked() {
-        guard isOpen, let item = model.item(at: cursorFromWheelCenter()) else { return }
+    /// The selected sector’s close action keeps the wheel open. Hub clicks do nothing;
+    /// clicks on sectors switch to the app the cursor points at.
+    private func clicked(at mouse: NSPoint) {
+        guard isOpen else { return }
+        let point = cursorFromWheelCenter(mouse)
+        if let (item, window) = model.closeTarget(at: point) {
+            closeWindow(window, of: item)
+            return
+        }
+        guard let item = model.item(at: point) else { return }
         log.notice("clicked \(item.name, privacy: .public)")
         let window = model.chosenWindow(of: item)?.id // before close() resets anything
         close()
@@ -116,29 +239,28 @@ final class WheelController {
 
     /// We're inside the event tap callback when this is called, and macOS holds the keyboard
     /// until it returns. Talking to WindowServer from in here can stall it — so do it right after.
-    private func activateSoon(_ pid: pid_t?, window: CGWindowID? = nil) {
+    private func activateSoon(_ pid: pid_t?, window: CGWindowID? = nil, opensWindowIfNone: Bool = true) {
         guard let pid else { return }
-        Task { AppActivator.activate(pid: pid, windowID: window) }
+        Task { AppActivator.activate(pid: pid, windowID: window, opensWindowIfNone: opensWindowIfNone) }
+    }
+
+    /// Hand the focus back to the app that had it when the wheel opened (our panel took it).
+    /// Never opens a window: if the user just closed that app's last one, it stays closed.
+    private func returnFocus() {
+        activateSoon(frontAppAtOpen, opensWindowIfNone: false)
     }
 
     /// Pointing hand while the mouse is on a sector, arrow otherwise (hub, Tab selection).
     /// Works although we're a background app thanks to BackgroundCursor.
+    /// Set on every mouse move, not only when it flips: AppKit quietly puts the arrow back
+    /// whenever it recomputes the panel's cursor areas, and a hand set once would stay lost.
     private func updateCursor() {
-        let hand = model.isPointingAtSector
-        if hand != showsPointingHand {
-            setCursor(pointingHand: hand)
-        }
-    }
-
-    private func setCursor(pointingHand: Bool) {
-        showsPointingHand = pointingHand
-        (pointingHand ? NSCursor.pointingHand : NSCursor.arrow).set()
+        (model.isPointingAtSector ? NSCursor.pointingHand : NSCursor.arrow).set()
     }
 
     /// Cursor position relative to the wheel center (= middle of the panel), y pointing down.
-    /// `NSEvent.mouseLocation` is in global screen coordinates with y pointing up, hence the flip.
-    private func cursorFromWheelCenter() -> CGPoint {
-        let mouse = NSEvent.mouseLocation
+    /// `mouse` is in global screen coordinates with y pointing up, hence the flip.
+    private func cursorFromWheelCenter(_ mouse: NSPoint = NSEvent.mouseLocation) -> CGPoint {
         let frame = window.frame
         return CGPoint(x: mouse.x - frame.midX, y: frame.midY - mouse.y)
     }

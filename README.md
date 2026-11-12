@@ -15,8 +15,9 @@
 - Pick an app by direction; the pointer can be anywhere on screen
 - Apps keep their slots, in launch order
 - A quick ⌘Tab jumps back to the previous app
-- Apps with several windows get a sector per window, or a fan of thumbnails past the rim
+- Apps with several windows get a sector per window
 - Live window previews
+- Close windows and quit apps without leaving the wheel
 - Lives in the menu bar; light and dark
 
 ## Install
@@ -39,6 +40,8 @@ On first launch, the setup window asks for **Accessibility** (required) and **Sc
 | ⌘Tab | Open the wheel |
 | Pointer, Tab, ⇧Tab | Select |
 | Release ⌘, or click | Switch |
+| ⌘W, or × on the selected sector’s outer rail | Close the selected window; the app's last one quits the app |
+| ⌘Q | Quit the selected app |
 | Esc | Cancel |
 
 ## Development
@@ -50,6 +53,10 @@ If the app dies without cleaning up and ⌘Tab stops working:
 ```bash
 build/CmdTabWheel.app/Contents/MacOS/CmdTabWheel --restore-native-switcher
 ```
+
+## Something wrong?
+
+Menu bar icon → **Save Log…**, then attach the file to an issue. It has what the app did since launch and its latest crash report: app names and errors, no window titles or keystrokes.
 
 ## License
 
