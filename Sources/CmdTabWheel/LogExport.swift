@@ -18,7 +18,7 @@ enum LogExport {
         let panel = NSSavePanel()
         panel.title = "Save Log"
         panel.message = "A text file to attach to a bug report: what ⌘Tab Wheel did since it started, and a few facts about this Mac."
-        panel.nameFieldStringValue = "CmdTabWheel log \(fileDate()).txt"
+        panel.nameFieldStringValue = "CmdTabWheel v\(AppVersion.number) log \(fileDate()).txt"
         panel.allowedContentTypes = [.plainText]
         panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
         NSApp.activate() // a menu bar app's panel would open behind the front app
@@ -42,14 +42,11 @@ enum LogExport {
 
     /// The state that explains most problems: permissions, Secure Input, whether the wheel is on.
     private static func summary() -> String {
-        let info = Bundle.main.infoDictionary ?? [:]
-        let version = info["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info["CFBundleVersion"] as? String ?? "?"
         let isInApplications = Bundle.main.bundleURL.deletingLastPathComponent().lastPathComponent == "Applications"
         let wheelEnabled = UserDefaults.standard.object(forKey: "wheelEnabled") as? Bool ?? true
         let secureInput = IsSecureEventInputEnabled() ? "on, held by \(SecureInput.ownerName() ?? "an app")" : "off"
         return """
-            ⌘Tab Wheel \(version) (\(build))\(isInApplications ? "" : ", not in an Applications folder")
+            ⌘Tab Wheel \(AppVersion.description)\(isInApplications ? "" : ", not in an Applications folder")
             macOS \(ProcessInfo.processInfo.operatingSystemVersionString), \(hardwareModel())
             Displays: \(NSScreen.screens.count)
             Accessibility: \(Permissions.hasAccessibility ? "granted" : "NOT granted")

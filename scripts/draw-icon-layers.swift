@@ -2,7 +2,7 @@
 // Draws the artwork layers of the app icon into Support/AppIcon.icon/Assets/.
 // The icon itself (background and layer styling) is described in Support/AppIcon.icon/icon.json
 // and can be tweaked in Icon Composer (Xcode → Open Developer Tool → Icon Composer).
-// The next build picks changes up: scripts/bundle-app.sh compiles the icon with actool.
+// The next build picks changes up: scripts/setup.sh compiles the icon with actool.
 //
 //   swift scripts/draw-icon-layers.swift
 //

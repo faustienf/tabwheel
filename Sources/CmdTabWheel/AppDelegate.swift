@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        log.notice("⌘Tab Wheel \(AppVersion.description, privacy: .public) started")
         appearanceSettings.apply()
         // First of all: a copy that's about to move to /Applications and relaunch shouldn't
         // grab ⌘Tab or open setup.
@@ -102,6 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let logItem = NSMenuItem(title: "Save Log…", action: #selector(saveLog), keyEquivalent: "")
         logItem.target = self
         menu.addItem(logItem)
+        let aboutItem = NSMenuItem(title: "About ⌘Tab Wheel", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
         menu.addItem(
             withTitle: "Quit ⌘Tab Wheel",
             action: #selector(NSApplication.terminate(_:)),
@@ -113,6 +117,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func saveLog() {
         LogExport.save()
+    }
+
+    /// The standard About panel: icon, name, "Version 13 (d97685b)" and a link to the repository.
+    @objc private func showAbout() {
+        let centered = NSMutableParagraphStyle()
+        centered.alignment = .center
+        let repository = "github.com/faustienf/tabwheel"
+        let credits = NSAttributedString(string: repository, attributes: [
+            .link: URL(string: "https://\(repository)")!,
+            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            .paragraphStyle: centered,
+        ])
+        NSApp.activate() // a menu bar app's panel would open behind the front app
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "⌘Tab Wheel",
+            .applicationVersion: AppVersion.number,
+            .version: AppVersion.commit,
+            .credits: credits,
+        ])
     }
 
     @objc private func showSetup() {

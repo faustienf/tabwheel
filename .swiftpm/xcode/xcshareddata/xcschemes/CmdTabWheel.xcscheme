@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   ⌘R in Xcode for a SwiftPM package that needs to run as a real .app:
-  - Build post-action: wrap the built binary into build/CmdTabWheel.app (scripts/bundle-app.sh).
+  - Build post-action: wrap the built binary into build/CmdTabWheel.app (scripts/setup.sh bundle).
   - Run pre-action:    quit a copy started outside Xcode, so two event taps don't fight.
   - Run:               launch build/CmdTabWheel.app under the debugger.
   - Run post-action:   Stop kills the app before it can re-enable the system ⌘Tab — do it for it.
@@ -18,7 +18,7 @@
             ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
             <ActionContent
                title = "Bundle .app"
-               scriptText = "ROOT=&quot;${WORKSPACE_PATH%/.swiftpm/xcode/package.xcworkspace}&quot;&#10;&quot;$ROOT/scripts/bundle-app.sh&quot; &quot;$BUILT_PRODUCTS_DIR/$PRODUCT_NAME&quot; &quot;$ROOT/build/CmdTabWheel.app&quot;&#10;">
+               scriptText = "ROOT=&quot;${WORKSPACE_PATH%/.swiftpm/xcode/package.xcworkspace}&quot;&#10;&quot;$ROOT/scripts/setup.sh&quot; bundle &quot;$BUILT_PRODUCTS_DIR/$PRODUCT_NAME&quot; &quot;$ROOT/build/CmdTabWheel.app&quot;&#10;">
                <EnvironmentBuildable>
                   <BuildableReference
                      BuildableIdentifier = "primary"

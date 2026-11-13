@@ -27,11 +27,12 @@ No releases yet. Needs macOS 14+ and Xcode 16+.
 ```bash
 git clone https://github.com/faustienf/tabwheel.git
 cd tabwheel
-scripts/build-app.sh
-open build/CmdTabWheel.app
+scripts/setup.sh
 ```
 
-On first launch, the setup window asks for **Accessibility** (required) and **Screen Recording** (optional, for previews).
+It asks what to do; the first answer, the default, builds the app, puts it in Applications and starts it. On first launch, the setup window asks for **Accessibility** (required) and **Screen Recording** (optional, for previews).
+
+To update, `git pull` and run `scripts/setup.sh` again: it quits the running copy and replaces it.
 
 ## Keys
 
@@ -46,12 +47,12 @@ On first launch, the setup window asks for **Accessibility** (required) and **Sc
 
 ## Development
 
-Open `Package.swift` in Xcode and press ⌘R, or run `scripts/run.sh`.
+Open `Package.swift` in Xcode and press ⌘R, or run `scripts/setup.sh dev`.
 
 If the app dies without cleaning up and ⌘Tab stops working:
 
 ```bash
-build/CmdTabWheel.app/Contents/MacOS/CmdTabWheel --restore-native-switcher
+scripts/setup.sh restore
 ```
 
 ## Something wrong?
