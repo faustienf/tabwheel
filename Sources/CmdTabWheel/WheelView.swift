@@ -156,7 +156,14 @@ struct WheelView: View {
             }
         } else {
             VStack(spacing: 10) {
-                CommandKeycap(size: CGSize(width: 48, height: 48), symbolSize: 25)
+                CommandKeycap(size: CGSize(width: 48, height: 48), symbolSize: 25, isAccented: true)
+                    .background {
+                        Circle()
+                            .fill(RadialGradient(colors: [accent.opacity(palette.isDark ? 0.1 : 0.06), .clear],
+                                                 center: .center, startRadius: 8, endRadius: 48))
+                            .frame(width: 96, height: 96)
+                            .accessibilityHidden(true)
+                    }
                 VStack(spacing: 5) {
                     Text("Choose an app")
                         .font(.system(size: 14, weight: .medium))
@@ -269,23 +276,24 @@ private struct HubIdentity: Hashable {
     let isQuickSwitch: Bool
 }
 
-/// A quiet key outline keeps the shortcut in the same visual weight as its caption.
+/// The empty state can use a coral accent; shortcut captions retain a quiet key outline.
 private struct CommandKeycap: View {
     let size: CGSize
     let symbolSize: CGFloat
+    var isAccented = false
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let isDark = colorScheme == .dark
         let shape = RoundedRectangle(cornerRadius: size.height * 0.24, style: .continuous)
         let palette = WheelPalette(isDark: isDark)
-        let ink = palette.ink
+        let tint = isAccented ? palette.accent : palette.ink
         return Image(systemName: "command")
             .font(.system(size: symbolSize, weight: .medium))
-            .foregroundStyle(palette.secondaryInk)
+            .foregroundStyle(isAccented ? palette.accent.opacity(0.9) : palette.secondaryInk)
             .frame(width: size.width, height: size.height)
-            .background(shape.fill(ink.opacity(isDark ? 0.06 : 0.035)))
-            .overlay(shape.strokeBorder(palette.border, lineWidth: 0.65))
+            .background(shape.fill(tint.opacity(isAccented ? (isDark ? 0.09 : 0.055) : (isDark ? 0.06 : 0.035))))
+            .overlay(shape.strokeBorder(isAccented ? palette.accent.opacity(0.2) : palette.border, lineWidth: 0.65))
     }
 }
 
