@@ -16,7 +16,8 @@
 - Apps keep their slots, in launch order
 - A quick ⌘Tab jumps back to the previous app
 - Apps with several windows get a sector per window
-- Live window previews
+- Windows on other desktops and minimized ones are there too
+- Window previews, live after a second (Live Preview in the menu bar)
 - Close windows and quit apps without leaving the wheel
 - Lives in the menu bar; light and dark
 
@@ -47,7 +48,7 @@ To update, `git pull` and run `scripts/setup.sh` again: it quits the running cop
 
 ## Development
 
-Open `Package.swift` in Xcode and press ⌘R, or run `scripts/setup.sh dev`.
+Open `Package.swift` in Xcode and press ⌘R, or run `scripts/setup.sh dev`. Tests: `scripts/setup.sh test`.
 
 If the app dies without cleaning up and ⌘Tab stops working:
 

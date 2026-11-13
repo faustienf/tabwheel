@@ -6,9 +6,10 @@ import ApplicationServices
 /// Why not just `NSRunningApplication.activate()`: since macOS 14 activation is "cooperative" —
 /// the system may ignore the request when the caller isn't the active app, and our agent never is.
 /// So:
-/// 1. App has a window on the current Space → focus and raise it the way AltTab and yabai do:
-///    private SkyLight calls make the app frontmost and the window key, Accessibility raises it.
-/// 2. No visible window (hidden, minimized, on another Space) or step 1 didn't take →
+/// 1. A window to bring up (on screen, on another desktop or minimized) → focus and raise it the
+///    way AltTab and yabai do: private SkyLight calls make the app frontmost and the window key,
+///    which also switches to its desktop; Accessibility un-minimizes and raises it.
+/// 2. No window (the app is hidden, or has none) or step 1 didn't take →
 ///    open the app through LaunchServices, exactly like clicking its Dock icon.
 @MainActor
 enum AppActivator {
@@ -35,7 +36,7 @@ enum AppActivator {
             // Accessibility calls go to the target app and block while it's busy. Keep them off
             // the main thread — it also runs our keyboard tap, and a stall there freezes typing.
             let focused = await Task.detached(priority: .userInitiated) {
-                WindowFocus.focusAndRaise(pid: pid, windowID: windowID)
+                await WindowFocus.focusAndRaise(pid: pid, windowID: windowID)
             }.value
 
             // Check that it actually worked; if not, fall back to the Dock-click way.
@@ -85,13 +86,20 @@ private enum WindowFocus {
     /// kCPSUserGenerated: treat it as if the user clicked the window.
     private static let userGenerated: UInt32 = 0x200
 
-    static func focusAndRaise(pid: pid_t, windowID: CGWindowID) -> Bool {
+    static func focusAndRaise(pid: pid_t, windowID: CGWindowID) async -> Bool {
         guard let getProcessForPID, let setFrontProcessWithOptions, let postEventRecordTo else {
             log.error("SkyLight symbols not found")
             return false
         }
         var psn = ProcessSerialNumber()
         guard getProcessForPID(pid, &psn) == noErr else { return false }
+
+        // A minimized window comes out of the Dock first. One on another desktop isn't known
+        // to Accessibility yet: it's raised below, once that desktop is shown.
+        let window = AXWindow.find(pid: pid, windowID: windowID, expected: false)
+        if let window, AXWindow.unminimize(window) {
+            log.notice("un-minimized the window")
+        }
 
         // 1. Make the app frontmost — this alone does NOT bring its window above other apps' windows.
         guard setFrontProcessWithOptions(&psn, windowID, userGenerated) == CGError.success.rawValue else {
@@ -110,12 +118,29 @@ private enum WindowFocus {
         _ = postEventRecordTo(&psn, bytes)
 
         // 3. Physically raise the window to the top.
-        raise(pid: pid, windowID: windowID)
+        if let window {
+            raise(window)
+        } else {
+            await raiseOnceShown(pid: pid, windowID: windowID)
+        }
         return true
     }
 
-    private static func raise(pid: pid_t, windowID: CGWindowID) {
-        guard let window = AXWindow.find(pid: pid, windowID: windowID) else { return }
+    /// A window on another desktop: macOS is switching there now, and once it's done,
+    /// Accessibility sees the window.
+    private static func raiseOnceShown(pid: pid_t, windowID: CGWindowID) async {
+        log.notice("the window is on another desktop: switching there")
+        for _ in 0..<10 {
+            try? await Task.sleep(for: .milliseconds(100))
+            if let window = AXWindow.find(pid: pid, windowID: windowID, expected: false) {
+                raise(window)
+                return
+            }
+        }
+        log.error("AX: window \(windowID, privacy: .public) didn't show up to raise")
+    }
+
+    private static func raise(_ window: AXUIElement) {
         let result = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
         if result != .success {
             log.error("AX: raise failed with \(result.rawValue, privacy: .public)")

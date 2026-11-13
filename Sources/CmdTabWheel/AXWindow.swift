@@ -15,13 +15,28 @@ enum AXWindow {
         return unsafeBitCast(pointer, to: GetWindow.self)
     }()
 
-    static func find(pid: pid_t, windowID: CGWindowID) -> AXUIElement? {
+    /// Only windows on a shown desktop (and minimized ones): Accessibility doesn't list the
+    /// others. `expected: false` when not finding it is no error.
+    static func find(pid: pid_t, windowID: CGWindowID, expected: Bool = true) -> AXUIElement? {
         guard let windows = windows(of: pid) else { return nil }
         let window = windows.first { id(of: $0) == windowID }
-        if window == nil {
+        if window == nil, expected {
             log.error("AX: window \(windowID, privacy: .public) not found in pid \(pid, privacy: .public)")
         }
         return window
+    }
+
+    /// Takes the window out of the Dock if it's minimized. True when it was.
+    static func unminimize(_ window: AXUIElement) -> Bool {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &value) == .success,
+              value as? Bool == true
+        else { return false }
+        let result = AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+        if result != .success {
+            log.error("AX: un-minimizing failed with \(result.rawValue, privacy: .public)")
+        }
+        return true
     }
 
     /// The app still has this window — open, minimized or behind a question — as opposed to

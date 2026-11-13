@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let wheel = WheelController()
     private let interceptor = CommandTabInterceptor()
     private let appearanceSettings = AppearanceSettings()
+    private let livePreviewSettings = LivePreviewSettings()
     private let setup = SetupWindowController()
     private var statusItem: NSStatusItem?
     private var permissionTimer: Timer?
@@ -24,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // First of all: a copy that's about to move to /Applications and relaunch shouldn't
         // grab ⌘Tab or open setup.
         if AppMover.moveIfNeeded() { return }
+        wheel.setLivePreviewEnabled(livePreviewSettings.isEnabled)
+        livePreviewSettings.onChange = { [weak self] enabled in self?.wheel.setLivePreviewEnabled(enabled) }
         setUpStatusItem()
         terminateCleanlyOnSignals()
         BackgroundCursor.enable() // so the wheel can show a plain arrow over other apps
@@ -88,10 +91,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         let switchItem = NSMenuItem()
-        switchItem.view = SwitchMenuItemView(title: "⌘Tab Wheel", isOn: isWheelEnabled) { [weak self] isOn in
+        switchItem.view = SwitchMenuItemView(title: "⌘Tab Wheel", isOn: isWheelEnabled, isHeading: true) { [weak self] isOn in
             self?.setWheelEnabled(isOn)
         }
         menu.addItem(switchItem)
+        menu.addItem(livePreviewSettings.makeMenuItem())
         menu.addItem(.separator())
         let appearanceItem = NSMenuItem(title: "Appearance", action: nil, keyEquivalent: "")
         appearanceItem.submenu = appearanceSettings.makeMenu()

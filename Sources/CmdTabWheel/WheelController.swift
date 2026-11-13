@@ -16,6 +16,11 @@ final class WheelController {
     /// The mouse while the wheel is open, on every screen and over Mission Control too.
     private let mouseTap = MouseTap()
     private var isOpen = false
+    /// Live Preview waits this long after the wheel opens. Most picks are done by then, and the
+    /// screenshot taken on opening is fresh enough for them; the stream is for lingering.
+    private static let livePreviewDelay = Duration.seconds(1)
+    private var livePreviewStart: Task<Void, Never>?
+    private var isLivePreviewDue = false
     private var terminationObserver: NSObjectProtocol?
     /// An app we told to close a window or quit is asking something first ("Save changes?").
     /// The wheel covers that question, so when the wheel closes this app comes to the front.
@@ -39,6 +44,11 @@ final class WheelController {
         }
     }
 
+    func setLivePreviewEnabled(_ enabled: Bool) {
+        previewer.isLivePreviewEnabled = enabled
+        if enabled { updateLivePreview() }
+    }
+
     func handle(_ input: WheelInput) {
         // Everything but `open` only makes sense while the wheel is up.
         guard isOpen || input.isOpen else { return }
@@ -47,7 +57,7 @@ final class WheelController {
             open()
         case .step(let backward):
             model.step(backward: backward)
-            updateCursor()
+            updateLivePreview()
         case .commit:
             // Closed windows or quit apps and picked nothing after → done tidying up: back to
             // where the user was, not to the app the selection was merely left on.
@@ -75,7 +85,7 @@ final class WheelController {
             close()
             returnFocusOrShowQuestion()
         case .closeWindow:
-            if let item = model.selectedItem, let window = model.chosenWindow(of: item) {
+            if let item = model.selectedItem, let window = model.closableWindow(of: item) {
                 closeWindow(window, of: item)
             }
         case .quitApp:
@@ -90,7 +100,7 @@ final class WheelController {
     private func closeWindow(_ window: AppWindow, of item: WheelItem) {
         log.notice("closing a window of \(item.name, privacy: .public)")
         model.removeWindow(window.id, of: item.pid)
-        updateCursor()
+        updateLivePreview()
         let pid = item.pid
         let name = item.name
         // Finder can't quit — it just stays without windows.
@@ -173,7 +183,7 @@ final class WheelController {
     private func appTerminated(_ pid: pid_t) {
         guard isOpen else { return }
         model.removeApp(pid)
-        updateCursor()
+        updateLivePreview()
     }
 
     private func open() {
@@ -204,20 +214,28 @@ final class WheelController {
         previewer.refresh(windows: windows, maxSize: model.layout.previewSize) { key, image in
             model.setPreview(image, for: key)
         }
+        scheduleLivePreview()
     }
 
     private func close() {
         isOpen = false
+        livePreviewStart?.cancel()
+        isLivePreviewDue = false
+        // Only the stream: screenshots still being taken land in the cache for the next ⌘Tab.
+        previewer.stopLivePreview()
         mouseTap.disable()
         window.hide()
         model.reset()
-        // Don't leave the hand behind: the app below only sets its cursor on its next mouse event.
+        // The app below restores its own cursor on its next mouse event.
         NSCursor.arrow.set()
     }
 
     private func pointerMoved(to mouse: NSPoint) {
         model.movePointer(to: cursorFromWheelCenter(mouse))
-        updateCursor()
+        // A plain arrow everywhere in the wheel. Set on every move: the app below may put its
+        // own cursor back (an I-beam, say) while ours is a background app.
+        NSCursor.arrow.set()
+        updateLivePreview()
     }
 
     /// The selected sector’s close action keeps the wheel open. Hub clicks do nothing;
@@ -250,12 +268,31 @@ final class WheelController {
         activateSoon(frontAppAtOpen, opensWindowIfNone: false)
     }
 
-    /// Pointing hand while the mouse is on a sector, arrow otherwise (hub, Tab selection).
-    /// Works although we're a background app thanks to BackgroundCursor.
-    /// Set on every mouse move, not only when it flips: AppKit quietly puts the arrow back
-    /// whenever it recomputes the panel's cursor areas, and a hand set once would stay lost.
-    private func updateCursor() {
-        (model.isPointingAtSector ? NSCursor.pointingHand : NSCursor.arrow).set()
+    /// Streams the window in the hub (Live Preview in the menu). Call on every selection change.
+    /// Not before `livePreviewDelay`: a capture stream lights the screen recording indicator
+    /// in the menu bar, and a quick ⌘Tab shouldn't flash it. Until then the hub shows the
+    /// screenshot taken on opening.
+    private func updateLivePreview() {
+        guard isOpen, isLivePreviewDue else { return }
+        let model = self.model
+        let item = model.selectedItem ?? model.quickSwitchItem
+        let key = item.map { item in
+            model.chosenWindow(of: item).map { PreviewKey.window($0.id) } ?? .app(item.pid)
+        }
+        previewer.showLivePreview(for: key, maxSize: model.layout.previewSize) { [weak model] key, image in
+            model?.setPreview(image, for: key)
+        }
+    }
+
+    private func scheduleLivePreview() {
+        isLivePreviewDue = false
+        livePreviewStart?.cancel()
+        livePreviewStart = Task { [weak self] in
+            try? await Task.sleep(for: Self.livePreviewDelay)
+            guard let self, !Task.isCancelled else { return }
+            self.isLivePreviewDue = true
+            self.updateLivePreview()
+        }
     }
 
     /// Cursor position relative to the wheel center (= middle of the panel), y pointing down.

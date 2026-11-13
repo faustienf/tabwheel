@@ -80,7 +80,7 @@ struct WheelView: View {
 
                 SelectionRim(index: index, count: count, radius: outerRadius - 1)
                     .stroke(accent.opacity(0.98), style: StrokeStyle(lineWidth: rimWidth, lineCap: .round))
-                    .opacity(isSelected && model.chosenWindow(of: model.items[index]) == nil ? 1 : 0)
+                    .opacity(isSelected && model.closableWindow(of: model.items[index]) == nil ? 1 : 0)
             }
         }
     }
@@ -88,7 +88,7 @@ struct WheelView: View {
     /// A slim rail replaces the selected rim. The close action sits off the radial path.
     @ViewBuilder
     private var actionRail: some View {
-        if let index = model.selectedIndex, model.chosenWindow(of: model.items[index]) != nil {
+        if let index = model.selectedIndex, model.closableWindow(of: model.items[index]) != nil {
             let count = model.items.count
             let center = model.layout.closeButtonCenter(index: index, count: count)
             let railAngle = model.layout.actionRailAngle(index: index, count: count)
@@ -129,12 +129,14 @@ struct WheelView: View {
     private var hubContent: some View {
         if let item = model.selectedItem ?? model.quickSwitchItem {
             CenteredWheelPreview {
-                hubPicture(for: item)
+                HubPicture(model: model, item: item, palette: palette)
             } header: {
                 if isQuickSwitchPreview {
                     QuickSwitchBadge()
-                } else if let position = model.windowPosition(of: item) {
-                    WindowCounterBadge(position: position, title: model.chosenWindow(of: item)?.title)
+                } else if let window = model.chosenWindow(of: item),
+                          model.windowPosition(of: item) != nil || window.place != .here {
+                    WindowCounterBadge(position: model.windowPosition(of: item), place: window.place.label,
+                                       title: window.title)
                         .frame(width: model.layout.previewSize.width)
                 }
             } footer: {
@@ -188,37 +190,6 @@ struct WheelView: View {
         .accessibilityLabel("Release Command to switch")
     }
 
-    /// Fixed dimensions keep the title still while a screenshot is loading.
-    private func hubPicture(for item: WheelItem) -> some View {
-        let box = model.layout.previewSize
-        return ZStack {
-            if let preview = model.preview(for: item) {
-                Image(nsImage: preview)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(palette.border, lineWidth: 0.75)
-                    }
-                    .shadow(color: .black.opacity(palette.previewShadow), radius: 6, y: 3)
-                    .padding(2)
-            } else {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(RadialGradient(colors: [accent.opacity(0.1), .clear],
-                                         center: .center, startRadius: 4, endRadius: box.width / 2))
-                Image(nsImage: item.icon)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: 60, height: 60)
-                    .shadow(color: .black.opacity(palette.previewShadow), radius: 6, y: 3)
-            }
-        }
-        .frame(width: box.width, height: box.height)
-        .accessibilityLabel("Window preview for \(item.name)")
-    }
-
     // MARK: - App ring
 
     private var icons: some View {
@@ -250,6 +221,45 @@ struct WheelView: View {
 
 /// An action embedded in the selected sector’s rail, outside the app icon.
 /// Clicks never reach SwiftUI here (WheelWindow takes them all) — WheelModel hit-tests it.
+/// The hub's picture: a window preview, or the app icon until there is one. A view of its own so
+/// a new picture (15 a second with Live Preview) redraws only this, not the whole wheel.
+/// Fixed dimensions keep the title still while a screenshot is loading.
+private struct HubPicture: View {
+    let model: WheelModel
+    let item: WheelItem
+    let palette: WheelPalette
+
+    var body: some View {
+        let box = model.layout.previewSize
+        ZStack {
+            if let preview = model.preview(for: item) {
+                Image(nsImage: preview)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(palette.border, lineWidth: 0.75)
+                    }
+                    .shadow(color: .black.opacity(palette.previewShadow), radius: 6, y: 3)
+                    .padding(2)
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(RadialGradient(colors: [palette.accent.opacity(0.1), .clear],
+                                         center: .center, startRadius: 4, endRadius: box.width / 2))
+                Image(nsImage: item.icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 60, height: 60)
+                    .shadow(color: .black.opacity(palette.previewShadow), radius: 6, y: 3)
+            }
+        }
+        .frame(width: box.width, height: box.height)
+        .accessibilityLabel("Window preview for \(item.name)")
+    }
+}
+
 private struct CloseButton: View {
     let size: CGFloat
     let isHovered: Bool

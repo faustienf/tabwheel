@@ -11,18 +11,20 @@ final class SwitchMenuItemView: NSView {
         set { toggle.state = newValue ? .on : .off }
     }
 
-    init(title: String, isOn: Bool, onChange: @escaping (Bool) -> Void) {
+    /// `isHeading`: bold, for the switch that heads the menu; other rows look like menu items.
+    init(title: String, isOn: Bool, isHeading: Bool = false, onChange: @escaping (Bool) -> Void) {
         self.onChange = onChange
         super.init(frame: NSRect(x: 0, y: 0, width: 240, height: 32))
         autoresizingMask = [.width] // stretch with the menu
 
         let label = NSTextField(labelWithString: title)
-        label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: isHeading ? .semibold : .regular)
 
         toggle.controlSize = .small
         toggle.state = isOn ? .on : .off
         toggle.target = self
         toggle.action = #selector(toggled)
+        toggle.setAccessibilityLabel(title)
 
         for view in [label, toggle] {
             view.translatesAutoresizingMaskIntoConstraints = false

@@ -7,6 +7,7 @@
 #
 #   install   build the app, put it in Applications in place of an older copy, start it
 #   dev       debug build into build/, start it from there and follow its log
+#   test      run the tests
 #   restore   quit the app and give ⌘Tab back to macOS (when the app died without doing it)
 #   bundle <binary> <app>   wrap a built binary into an .app (Xcode does this after each build)
 set -euo pipefail
@@ -26,13 +27,15 @@ menu() {
   echo "⌘Tab Wheel"
   echo "  1) Install or update: build it, put it in Applications, start it"
   echo "  2) Develop: a debug build from build/, with its log in this window"
-  echo "  3) Quit it and give ⌘Tab back to macOS"
+  echo "  3) Run the tests"
+  echo "  4) Quit it and give ⌘Tab back to macOS"
   while true; do
     read -r -p "What to do? [1] " choice || exit 1 # Ctrl+D
     case "${choice:-1}" in
       1) install_app; return ;;
       2) run_dev; return ;;
-      3) restore_switcher; return ;;
+      3) run_tests; return ;;
+      4) restore_switcher; return ;;
     esac
   done
 }
@@ -110,6 +113,14 @@ run_dev() {
     --predicate 'subsystem == "com.faustienf.CmdTabWheel"'
 }
 
+# MARK: - Test
+
+run_tests() {
+  check_tools
+  echo "▸ swift test"
+  swift test
+}
+
 # MARK: - Give ⌘Tab back
 
 restore_switcher() {
@@ -129,8 +140,18 @@ restore_switcher() {
 check_tools() {
   [ "$(id -u)" -ne 0 ] || fail "run it without sudo"
   [ "$(sw_vers -productVersion | cut -d. -f1)" -ge 14 ] || fail "⌘Tab Wheel needs macOS 14 or later"
+  use_xcode
   xcrun --find swift >/dev/null 2>&1 \
     || fail "no Swift here: install Xcode 16 or later from the App Store, open it once, then run this again"
+}
+
+# Xcode's tools even when the Command Line Tools are the selected ones (xcode-select): every
+# command builds with the same Swift, and only Xcode has Swift Testing. The two Swifts can
+# disagree about what compiles, so building with one and testing with the other hides errors.
+use_xcode() {
+  if xcode-select -p 2>/dev/null | grep -q CommandLineTools && [ -d /Applications/Xcode.app ]; then
+    export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+  fi
 }
 
 # Quits every running copy, whatever folder it runs from. Two copies would fight over ⌘Tab, and
@@ -246,10 +267,11 @@ case "${1:-}" in
   "") if [ -t 0 ]; then menu; else install_app; fi ;;
   install) install_app ;;
   dev) run_dev ;;
+  test) run_tests ;;
   restore) restore_switcher ;;
   bundle)
     [ $# -eq 3 ] || fail "usage: scripts/setup.sh bundle <binary> <output.app>"
     bundle_app "$2" "$3"
     ;;
-  *) fail "unknown command: $1 (there are install, dev, restore)" ;;
+  *) fail "unknown command: $1 (there are install, dev, test, restore)" ;;
 esac

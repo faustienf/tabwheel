@@ -20,6 +20,18 @@ struct WheelItem: Identifiable {
     var id: ID { ID(pid: pid, window: window?.id) }
 }
 
+extension WheelItem {
+    /// The app as a whole: one sector.
+    init(app: NSRunningApplication) {
+        self.init(
+            pid: app.processIdentifier,
+            name: app.localizedName ?? app.bundleIdentifier ?? "?",
+            icon: app.icon ?? NSImage(),
+            app: app
+        )
+    }
+}
+
 /// Wheel state: which apps are on it and which one is selected.
 /// `@Observable` makes SwiftUI re-render whatever reads these properties (like a store).
 ///
@@ -41,15 +53,13 @@ final class WheelModel {
     /// Window screenshots, shown in the hub. Kept between openings so the next ⌘Tab
     /// shows them instantly; refreshed in the background every time the wheel opens.
     private(set) var previews: [PreviewKey: NSImage] = [:]
-    /// Each app's windows on the current Space, front to back — taken when the wheel opens.
+    /// Each app's windows — on screen first, front to back; then on other desktops and
+    /// minimized — taken when the wheel opens.
     private(set) var windows: [pid_t: [AppWindow]] = [:]
     /// The pointer is on the close action in the selected sector’s outer rail.
     private(set) var isCloseButtonHovered = false
 
     var selectedItem: WheelItem? { selectedIndex.map { items[$0] } }
-
-    /// Mouse over a sector or its action rail — the cursor shows a pointing hand.
-    var isPointingAtSector: Bool { isCloseButtonHovered || (isPointerActive && selectedIndex != nil) }
 
     /// The previously used app. A quick ⌘Tab — released without touching anything — goes there.
     private(set) var quickSwitchPID: pid_t?
@@ -83,27 +93,27 @@ final class WheelModel {
     /// Regular apps (the ones with a Dock icon), in launch order — stable slots for muscle memory.
     /// Sorted explicitly: Apple documents the order of `runningApplications` as unspecified.
     func reload(pointer: CGPoint, quickSwitchTo quickSwitchPID: pid_t?) {
-        self.quickSwitchPID = quickSwitchPID
-        wasTouched = false
-        hasClosedSomething = false
         let apps = NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular }
             .map { (app: $0, started: $0.startDate) } // look the date up once, not per comparison
             .sorted { ($0.started, $0.app.processIdentifier) < ($1.started, $1.app.processIdentifier) }
-            .map(\.app)
-        let running = Set(apps.map(\.processIdentifier))
-        windows = WindowList.windowsByApp().filter { running.contains($0.key) }
-        items = sectors(for: apps.map { app in
-            WheelItem(
-                pid: app.processIdentifier,
-                name: app.localizedName ?? app.bundleIdentifier ?? "?",
-                icon: app.icon ?? NSImage(),
-                app: app
-            )
-        })
+            .map { WheelItem(app: $0.app) }
+        let windows = WindowList.windowsByApp(of: Set(apps.map(\.pid)))
+        load(apps: apps, windows: windows, pointer: pointer, quickSwitchTo: quickSwitchPID)
+    }
+
+    /// `reload` once the running apps (in slot order) and their windows are known.
+    /// Tests start here.
+    func load(apps: [WheelItem], windows: [pid_t: [AppWindow]], pointer: CGPoint, quickSwitchTo quickSwitchPID: pid_t?) {
+        self.quickSwitchPID = quickSwitchPID
+        wasTouched = false
+        hasClosedSomething = false
+        let running = Set(apps.map(\.pid))
+        self.windows = windows.filter { running.contains($0.key) }
+        items = sectors(for: apps)
         select(nil)
         // Drop screenshots of windows that are gone and apps that have quit.
-        let windowIDs = Set(windows.values.flatMap { $0.map(\.id) })
+        let windowIDs = Set(self.windows.values.flatMap { $0.map(\.id) })
         previews = previews.filter { key, _ in
             switch key {
             case .window(let id): windowIDs.contains(id)
@@ -200,9 +210,17 @@ final class WheelModel {
         previews[key] = image.map { NSImage(cgImage: $0, size: .zero) }
     }
 
-    /// The window switching to `item` brings up; nil when it has none on this Space.
+    /// The window switching to `item` brings up; nil when the app has none to show.
     func chosenWindow(of item: WheelItem) -> AppWindow? {
         item.window ?? windows[item.pid]?.first
+    }
+
+    /// The chosen window, if the wheel can close it (the close action, ⌘W). Not a window on
+    /// another desktop: Accessibility, which presses its close button, only sees the shown ones.
+    func closableWindow(of item: WheelItem) -> AppWindow? {
+        guard let window = chosenWindow(of: item) else { return nil }
+        if case .otherDesktop = window.place { return nil }
+        return window
     }
 
     /// "Window 2 of 3" for the hub — only for apps with more than one window.
@@ -240,7 +258,7 @@ final class WheelModel {
         updateSelectionReach(distance: distance)
         // Keep the visible rail attached to its owner while aiming at its actions,
         // including the short path from the icon. This matters with tightly packed sectors.
-        if let index = selectedIndex, chosenWindow(of: items[index]) != nil,
+        if let index = selectedIndex, closableWindow(of: items[index]) != nil,
            layout.actionRailContains(point, index: index, count: items.count) {
             return
         }
@@ -261,7 +279,7 @@ final class WheelModel {
     func item(at point: CGPoint) -> WheelItem? {
         let distance = hypot(point.x, point.y)
         guard !items.isEmpty, distance >= layout.innerRadius else { return nil }
-        if let index = selectedIndex, chosenWindow(of: items[index]) != nil,
+        if let index = selectedIndex, closableWindow(of: items[index]) != nil,
            layout.actionRailContains(point, index: index, count: items.count) {
             return items[index]
         }
@@ -271,7 +289,7 @@ final class WheelModel {
 
     /// Only the action on the visible rail is clickable; hidden sectors have no close target.
     func closeTarget(at point: CGPoint) -> (item: WheelItem, window: AppWindow)? {
-        guard let index = selectedIndex, let window = chosenWindow(of: items[index]) else { return nil }
+        guard let index = selectedIndex, let window = closableWindow(of: items[index]) else { return nil }
         let center = layout.closeButtonCenter(index: index, count: items.count)
         guard hypot(point.x - center.x, point.y - center.y) <= WheelLayout.closeButtonHitRadius else { return nil }
         return (items[index], window)

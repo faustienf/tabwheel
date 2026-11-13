@@ -9,7 +9,7 @@ let logSubsystem = "com.faustienf.CmdTabWheel"
 let log = Logger(subsystem: logSubsystem, category: "app")
 
 /// What the user does with the wheel on the keyboard.
-enum WheelInput {
+enum WheelInput: Equatable {
     case open                    // ⌘Tab pressed
     case step(backward: Bool)    // Tab / ⇧Tab again while ⌘ is still held
     case commit                  // ⌘ released
@@ -110,8 +110,8 @@ final class CommandTabInterceptor {
 
     /// Returns true to pass the event on, false to swallow it.
     /// `character`: what the key types in the current layout (key events with ⌘ only).
-    fileprivate func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags,
-                            character: String?, isRepeat: Bool) -> Bool {
+    func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags,
+                character: String?, isRepeat: Bool) -> Bool {
         let command = flags.contains(.maskCommand)
         let letter = command ? KeyCode.latinLetter(keyCode: keyCode, character: character) : nil
 
@@ -162,7 +162,7 @@ final class CommandTabInterceptor {
     }
 }
 
-private enum KeyCode {
+enum KeyCode {
     static let tab: Int64 = 48    // kVK_Tab
     static let escape: Int64 = 53 // kVK_Escape
 

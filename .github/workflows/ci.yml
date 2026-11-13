@@ -1,0 +1,22 @@
+# On every push and pull request: the tests, then the release build wrapped into the .app,
+# the way scripts/setup.sh installs it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version number counts commits
+      - name: Tests
+        run: scripts/setup.sh test
+      - name: Release build
+        run: swift build -c release
+      - name: Bundle the app
+        run: scripts/setup.sh bundle "$(swift build -c release --show-bin-path)/CmdTabWheel" build/CmdTabWheel.app

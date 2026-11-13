@@ -1,17 +1,26 @@
 import SwiftUI
 
-/// "2 / 3 · window title" above the preview, for apps with several windows.
+/// "2 / 3 · Desktop 2 · window title" above the preview: which of the app's windows this is
+/// (when it has several) and where it is (when not on screen).
 struct WindowCounterBadge: View {
-    var position: (index: Int, count: Int)
+    var position: (index: Int, count: Int)?
+    /// "Desktop 2", "Minimized"; nil for a window on screen.
+    var place: String?
     var title: String?
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "macwindow.on.rectangle")
                 .fixedSize()
-            Text("\(position.index + 1) / \(position.count)")
-                .monospacedDigit()
-                .fixedSize()
+            if let position {
+                Text("\(position.index + 1) / \(position.count)")
+                    .monospacedDigit()
+                    .fixedSize()
+            }
+            if let place {
+                Text(place)
+                    .fixedSize()
+            }
             if let title {
                 Text(title)
                     .fontWeight(.medium)
@@ -23,7 +32,12 @@ struct WindowCounterBadge: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(WheelBadgeStyle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Window \(position.index + 1) of \(position.count)\(title.map { ": \($0)" } ?? "")")
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        let window = position.map { "Window \($0.index + 1) of \($0.count)" } ?? "Window"
+        return [window, place, title].compactMap { $0 }.joined(separator: ", ")
     }
 }
 
